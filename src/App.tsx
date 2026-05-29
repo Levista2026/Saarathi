@@ -151,13 +151,13 @@ export default function App() {
   const [filtersOpenMobile, setFiltersOpenMobile] = useState(false);
 
   useEffect(() => {
-    const initAuth = async () => {
-      if (!supabase) {
-        setError(supabaseConfigError);
-        setAuthLoading(false);
-        return;
-      }
+    if (!supabase) {
+      setError(supabaseConfigError);
+      setAuthLoading(false);
+      return;
+    }
 
+    const initAuth = async () => {
       const { data } = await supabase.auth.getSession();
       const email = data.session?.user?.email ?? null;
       setUserEmail(email);
