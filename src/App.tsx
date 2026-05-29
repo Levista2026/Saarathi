@@ -24,8 +24,11 @@ type UserAccess = {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const tableName = (import.meta.env.VITE_SUPABASE_TABLE as string) || "Saarathi";
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseConfigError =
+  !supabaseUrl || !supabaseAnonKey
+    ? "Supabase environment variables are missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your hosting environment."
+    : null;
+const supabase = supabaseConfigError ? null : createClient(supabaseUrl, supabaseAnonKey);
 const FILTER_KEYS: FilterKey[] = ["Month", "Subzone", "RSM", "ASM", "SO", "DB Name"];
 const HIERARCHY_KEYS: FilterKey[] = ["Subzone", "RSM", "ASM", "SO", "DB Name"];
 
@@ -149,6 +152,12 @@ export default function App() {
 
   useEffect(() => {
     const initAuth = async () => {
+      if (!supabase) {
+        setError(supabaseConfigError);
+        setAuthLoading(false);
+        return;
+      }
+
       const { data } = await supabase.auth.getSession();
       const email = data.session?.user?.email ?? null;
       setUserEmail(email);
@@ -173,6 +182,7 @@ export default function App() {
 
   useEffect(() => {
     const fetchAccess = async () => {
+      if (!supabase) return;
       if (!userEmail) {
         setAccessRow(null);
         return;
@@ -225,6 +235,11 @@ export default function App() {
     let active = true;
 
     const loadRows = async () => {
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
@@ -290,6 +305,10 @@ export default function App() {
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!supabase) {
+      setLoginError(supabaseConfigError);
+      return;
+    }
     setLoginError(null);
     setAuthMessage(null);
     const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -303,6 +322,10 @@ export default function App() {
 
   const handleSignup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!supabase) {
+      setLoginError(supabaseConfigError);
+      return;
+    }
     setLoginError(null);
     setAuthMessage(null);
     const cleanEmail = signupEmail.trim().toLowerCase();
@@ -375,6 +398,10 @@ export default function App() {
 
   const handleForgotPassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!supabase) {
+      setLoginError(supabaseConfigError);
+      return;
+    }
     setLoginError(null);
     setAuthMessage(null);
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(loginEmail.trim(), {
@@ -389,6 +416,10 @@ export default function App() {
 
   const handleResetPassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!supabase) {
+      setLoginError(supabaseConfigError);
+      return;
+    }
     setLoginError(null);
     setAuthMessage(null);
     const { error: updateError } = await supabase.auth.updateUser({ password: resetPassword });
@@ -401,6 +432,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
     setAccessRow(null);
     setFilters(EMPTY_FILTERS);
@@ -657,6 +689,16 @@ export default function App() {
       <main className="container">
         <h1>Levista Saarathi Club</h1>
         <p>Checking login session...</p>
+      </main>
+    );
+  }
+
+  if (supabaseConfigError) {
+    return (
+      <main className="container authScreen">
+        <h1>Levista Saarathi Club</h1>
+        <p className="error">{supabaseConfigError}</p>
+        <p className="meta">Current table setting: public.{tableName}</p>
       </main>
     );
   }
