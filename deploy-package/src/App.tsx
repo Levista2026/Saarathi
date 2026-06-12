@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 
 type SaarathiRow = Record<string, string | number | boolean | null>;
 type FilterKey = "Month" | "Subzone" | "RSM" | "ASM" | "SO" | "DB Name";
@@ -43,7 +43,6 @@ const MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 const DISPLAY_COLUMNS = [
   "SO",
   "ASM",
-  "RSM",
   "DB Code",
   "DB Name",
   "Outlet Id",
@@ -55,23 +54,6 @@ const DISPLAY_COLUMNS = [
   "Payout %",
 ] as const;
 const SEARCH_COLUMNS = ["SO", "ASM", "RSM", "DB Code", "DB Name", "Outlet Id", "Outlet Name", "Club"] as const;
-const EXPORT_COLUMNS = [
-  { key: "SO", label: "SO Name" },
-  { key: "ASM", label: "ASM" },
-  { key: "RSM", label: "RSM" },
-  { key: "DB Code", label: "DB Code" },
-  { key: "DB Name", label: "DB Name" },
-  { key: "Outlet Id", label: "Outlet ID" },
-  { key: "Outlet Name", label: "Outlet Name" },
-  { key: "LYSM Tgt", label: "LYSM" },
-  { key: "Ach", label: "Ach" },
-  { key: "Club", label: "Club" },
-  { key: "Growth %", label: "Growth %" },
-  { key: "Payout %", label: "Payout %" },
-  { key: "Beat Id", label: "Beat Id" },
-  { key: "Beat Name", label: "Beat Name" },
-  { key: "Order Value", label: "Order Value" },
-] as const;
 
 const getCellValue = (row: SaarathiRow, key: FilterKey): string => {
   const value = row[key];
@@ -596,93 +578,26 @@ export default function App() {
   };
 
   const downloadExcel = () => {
-    void (async () => {
-      const workbook = new ExcelJS.Workbook();
-      workbook.creator = "Codex";
-      workbook.lastModifiedBy = "Codex";
-      workbook.created = new Date();
-      workbook.modified = new Date();
-      workbook.properties.date1904 = true;
-
-      const sheet = workbook.addWorksheet("Saarathi", {
-        views: [{ state: "frozen", ySplit: 1 }],
-      });
-
-      sheet.columns = EXPORT_COLUMNS.map(({ label }) => ({
-        header: label,
-        key: label,
-        width:
-          label === "DB Name" || label === "Outlet Name"
-            ? 32
-            : label === "SO Name" || label === "ASM" || label === "RSM"
-              ? 22
-              : label === "Beat Name"
-                ? 20
-                : label === "Order Value"
-                  ? 14
-                  : 14,
-      }));
-
-      const headerRow = sheet.getRow(1);
-      headerRow.height = 22;
-      headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      headerRow.alignment = { vertical: "middle", horizontal: "center" };
-      headerRow.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF1F5B99" },
-      };
-      headerRow.border = {
-        top: { style: "thin", color: { argb: "FFB7C9E2" } },
-        left: { style: "thin", color: { argb: "FFB7C9E2" } },
-        bottom: { style: "thin", color: { argb: "FFB7C9E2" } },
-        right: { style: "thin", color: { argb: "FFB7C9E2" } },
-      };
-
-      for (const row of sortedRows) {
-        const dataRow = EXPORT_COLUMNS.map(({ key }) => {
-          if (key === "LYSM Tgt" || key === "Ach" || key === "Order Value") {
-            return Math.round(parseNumber(row[key]));
-          } else if (key === "Outlet Id") {
-            return Math.round(parseNumber(row[key]));
-          }
-          return row[key] === null || row[key] === undefined ? "" : String(row[key]);
-        });
-        const added = sheet.addRow(dataRow);
-        added.height = 18;
-        added.eachCell((cell, columnNumber) => {
-          const label = EXPORT_COLUMNS[columnNumber - 1]?.label ?? "";
-          const centerColumns = new Set(["Outlet ID", "LYSM", "Ach", "Growth %", "Payout %", "Order Value"]);
-          cell.alignment = {
-            vertical: "middle",
-            horizontal: centerColumns.has(label) ? "center" : "left",
-          };
-          cell.border = {
-            top: { style: "thin", color: { argb: "FFD9E2F3" } },
-            left: { style: "thin", color: { argb: "FFD9E2F3" } },
-            bottom: { style: "thin", color: { argb: "FFD9E2F3" } },
-            right: { style: "thin", color: { argb: "FFD9E2F3" } },
-          };
-        });
+    const exportRows = sortedRows.map((row) => {
+      const out: Record<string, string | number> = {};
+      for (const column of columns) {
+        if (column === "LYSM Tgt" || column === "Ach") {
+          out[column] = Math.round(parseNumber(row[column]));
+        } else {
+          out[column] = row[column] === null || row[column] === undefined ? "" : String(row[column]);
+        }
       }
+      return out;
+    });
 
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = "levista_saarathi_club.xlsx";
-      anchor.click();
-      URL.revokeObjectURL(url);
-    })();
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Saarathi");
+    XLSX.writeFile(wb, "levista_saarathi_club.xlsx");
   };
 
   const kpis = useMemo(() => {
     const uniqueOutlets = new Set<string>();
-    const coverageOutlets = new Set<string>();
-    const growthOutlets = new Set<string>();
-    const inClubNoGrowthOutlets = new Set<string>();
-    const growthNotInClubOutlets = new Set<string>();
     let diamond = 0;
     let gold = 0;
     let silver = 0;
@@ -691,32 +606,10 @@ export default function App() {
     let billedNotInClub = 0;
     let totalAch = 0;
 
-    for (const row of rowsByHierarchy) {
+    for (const row of rowsAfterSearch) {
       const outletId = row["Outlet Id"];
       if (outletId !== null && outletId !== undefined && String(outletId).trim() !== "") {
-        const outletKey = String(outletId);
-        uniqueOutlets.add(outletKey);
-
-        if (parseNumber(row.Ach) > 0) {
-          coverageOutlets.add(outletKey);
-        }
-
-        if (parseNumber(row["Payout %"]) > 0) {
-          growthOutlets.add(outletKey);
-        }
-
-        const club = normalizeClub(row.Club);
-        const payout = parseNumber(row["Payout %"]);
-        const growth = parseNumber(row["Growth %"]);
-        if (
-          (club === "diamond" || club === "daimond" || club === "gold" || club === "silver") &&
-          payout === 0
-        ) {
-          inClubNoGrowthOutlets.add(outletKey);
-        }
-        if (growth >= 30 && club === "no club") {
-          growthNotInClubOutlets.add(outletKey);
-        }
+        uniqueOutlets.add(String(outletId));
       }
 
       const club = normalizeClub(row.Club);
@@ -733,23 +626,15 @@ export default function App() {
 
     return {
       totalOutletsEnrolled: uniqueOutlets.size,
-      coverageAchievement:
-        uniqueOutlets.size > 0 ? (coverageOutlets.size / uniqueOutlets.size) * 100 : 0,
-      coverageOutletCount: coverageOutlets.size,
-      outletsGrowthAchievement:
-        uniqueOutlets.size > 0 ? (growthOutlets.size / uniqueOutlets.size) * 100 : 0,
-      growthOutletCount: growthOutlets.size,
       diamond,
       gold,
       silver,
       noClub,
       unbilled,
       billedNotInClub,
-      inClubNoGrowth: inClubNoGrowthOutlets.size,
-      growthNotInClub: growthNotInClubOutlets.size,
       totalAch,
     };
-  }, [rowsByHierarchy]);
+  }, [rowsAfterSearch]);
 
   const pageList = useMemo(() => {
     const pages: (number | "...")[] = [];
@@ -945,16 +830,7 @@ export default function App() {
   return (
     <main className="container">
       <div className="topHeader">
-        <button
-          type="button"
-          className="mobileFilterToggle"
-          onClick={() => setFiltersOpenMobile((prev) => !prev)}
-        >
-          {filtersOpenMobile ? "Hide Filters" : "Show Filters"}
-        </button>
-
-        <h1 className="appTitle">Levista Saarathi Club</h1>
-
+        <h1>Levista Saarathi Club</h1>
         <div className="userBlock">
           <p className="userNameLabel">{userEmail}</p>
           <button type="button" className="logoutBtn" onClick={handleLogout}>
@@ -964,38 +840,27 @@ export default function App() {
       </div>
 
       <section className="kpiGrid">
-        <article className="kpiCard kpiCardPrimary">
+        <article className="kpiCard">
           <p className="kpiLabel">Total Outlets Enrolled</p>
           <p className="kpiValue">{kpis.totalOutletsEnrolled}</p>
-          <p className="kpiLabel kpiLabelSpacing">Slabs</p>
+        </article>
+
+        <article className="kpiCard">
+          <p className="kpiLabel">Slabs</p>
           <p className="kpiSubline">Diamond: {kpis.diamond}</p>
           <p className="kpiSubline">Gold: {kpis.gold}</p>
           <p className="kpiSubline">Silver: {kpis.silver}</p>
           <p className="kpiSubline">No Club: {kpis.noClub}</p>
         </article>
 
-        <article className="kpiCard kpiCardSmooth">
-          <p className="kpiLabel">Coverage Target 98%</p>
-          <p className="kpiValue">
-            {kpis.coverageAchievement.toFixed(1)}% <span className="kpiCount">({kpis.coverageOutletCount})</span>
-          </p>
-          <p className="kpiLabel kpiLabelSpacing">Outlets Growth Target 60%</p>
-          <p className="kpiValue">
-            {kpis.outletsGrowthAchievement.toFixed(1)}% <span className="kpiCount">({kpis.growthOutletCount})</span>
-          </p>
-          <p className="kpiLabel kpiLabelSpacing">LPPC</p>
-          <p className="kpiValue">0</p>
-        </article>
-
         <article className="kpiCard">
           <p className="kpiLabel">Unbilled Outlets</p>
           <p className="kpiValue">{kpis.unbilled}</p>
-          <p className="kpiLabel kpiLabelSpacing">Billed but Not in Club</p>
-          <p className="kpiValue kpiValueSmall">{kpis.billedNotInClub}</p>
-          <p className="kpiLabel kpiLabelSpacing">In Club But No Growth</p>
-          <p className="kpiValue kpiValueSmall">{kpis.inClubNoGrowth}</p>
-          <p className="kpiLabel kpiLabelSpacing">Growth But Not in Club</p>
-          <p className="kpiValue kpiValueSmall">{kpis.growthNotInClub}</p>
+        </article>
+
+        <article className="kpiCard">
+          <p className="kpiLabel">Billed but Not in Club</p>
+          <p className="kpiValue">{kpis.billedNotInClub}</p>
         </article>
 
         <article className="kpiCard">
@@ -1004,23 +869,21 @@ export default function App() {
         </article>
       </section>
 
-      <div
-        className={`filterBackdrop ${filtersOpenMobile ? "show" : ""}`}
-        onClick={() => setFiltersOpenMobile(false)}
-      />
+      <button
+        type="button"
+        className="mobileFilterToggle"
+        onClick={() => setFiltersOpenMobile((prev) => !prev)}
+      >
+        {filtersOpenMobile ? "Hide Filters" : "Show Filters"}
+      </button>
 
       <div className="contentGrid">
         <aside className={`filtersPanel ${filtersOpenMobile ? "openMobile" : "closedMobile"}`}>
           <div className="filtersHeader">
             <h2>Filters</h2>
-            <div className="filtersHeaderActions">
-              <button type="button" className="clearBtn" onClick={clearFilters}>
-                Clear
-              </button>
-              <button type="button" className="filtersCloseBtn" onClick={() => setFiltersOpenMobile(false)}>
-                Close
-              </button>
-            </div>
+            <button type="button" className="clearBtn" onClick={clearFilters}>
+              Clear
+            </button>
           </div>
           {FILTER_KEYS.map((key) => (
             <label key={key} className="filterField">

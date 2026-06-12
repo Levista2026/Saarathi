@@ -87,13 +87,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.appTitle {
-  flex: 1;
-  text-align: center;
-  margin: 0;
 }
 
 .userBlock {
@@ -128,7 +121,7 @@ h1 {
 
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
   position: sticky;
@@ -142,12 +135,8 @@ h1 {
   background: linear-gradient(135deg, #ffffff 0%, #eef5ff 100%);
   border: 1px solid #cbd5e1;
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 14px;
   box-shadow: 0 6px 18px rgba(11, 60, 93, 0.08);
-  min-height: 220px;
-}
-.kpiCardPrimary {
-  min-height: 220px;
 }
 .kpiCard:nth-child(1) { background: linear-gradient(135deg, #f8fbff 0%, #e6f0ff 100%); }
 .kpiCard:nth-child(2) { background: linear-gradient(135deg, #fff9e7 0%, #f3de9d 100%); }
@@ -155,16 +144,9 @@ h1 {
 .kpiCard:nth-child(4) { background: linear-gradient(135deg, #fff2e8 0%, #e7c8ac 100%); }
 .kpiCard:nth-child(5) { background: linear-gradient(135deg, #f5f9ff 0%, #e3ecff 100%); }
 
-.kpiCardSmooth {
-  background: linear-gradient(135deg, #eff7ff 0%, #dfefff 100%);
-  border: 1px solid #bcd4f0;
-  padding: 10px 12px;
-  min-height: 220px;
-}
-
 .kpiLabel {
-  margin: 0 0 6px;
-  font-size: 11px;
+  margin: 0 0 8px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   color: #475569;
@@ -172,43 +154,15 @@ h1 {
 
 .kpiValue {
   margin: 0;
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   color: #0f172a;
 }
 
-.kpiValueSmall {
-  font-size: 22px;
-}
-
 .kpiSubline {
-  margin: 3px 0;
-  font-size: 13px;
+  margin: 4px 0;
+  font-size: 14px;
   color: #1e293b;
-}
-
-.kpiLabelSpacing {
-  margin-top: 8px;
-}
-
-.kpiCardSmooth .kpiLabel {
-  font-size: 9px;
-  margin-bottom: 2px;
-}
-
-.kpiCardSmooth .kpiValue {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.kpiCount {
-  font-size: 11px;
-  font-weight: 600;
-  color: #334155;
-}
-
-.kpiCardSmooth .kpiValue + .kpiLabel {
-  margin-top: 6px;
 }
 
 .contentGrid {
@@ -241,12 +195,6 @@ h1 {
   margin-bottom: 12px;
 }
 
-.filtersHeaderActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .clearBtn {
   border: 1px solid #93c5fd;
   background: #eff6ff;
@@ -259,17 +207,6 @@ h1 {
 
 .clearBtn:hover {
   background: #dbeafe;
-}
-
-.filtersCloseBtn {
-  display: none;
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  color: #334155;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .filterField {
@@ -298,10 +235,6 @@ h1 {
   padding: 8px 12px;
   font-weight: 700;
   cursor: pointer;
-}
-
-.filterBackdrop {
-  display: none;
 }
 
 .error {
@@ -550,7 +483,7 @@ th.stickyCol2 {
 
 @media (max-width: 980px) {
   .kpiGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
     position: static;
     padding: 0;
   }
@@ -560,55 +493,17 @@ th.stickyCol2 {
   }
 
   .filtersPanel {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(84vw, 320px);
-    z-index: 40;
-    transform: translateX(-105%);
-    transition: transform 180ms ease;
-    border-radius: 0 16px 16px 0;
-    overflow-y: auto;
-    padding: 14px 12px;
-  }
-
-  .filtersPanel.openMobile {
-    transform: translateX(0);
-  }
-
-  .filtersPanel.closedMobile {
-    display: block;
-    transform: translateX(-105%);
-  }
-
-  .filterBackdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.32);
-    backdrop-filter: blur(2px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 180ms ease;
-    z-index: 35;
-  }
-
-  .filterBackdrop.show {
-    opacity: 1;
-    pointer-events: auto;
+    position: static;
   }
 
   .topHeader {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 
   .userBlock {
-    align-items: flex-end;
-    width: 100%;
+    align-items: flex-start;
   }
 
   .tableTopBar {
@@ -626,83 +521,36 @@ th.stickyCol2 {
 
   .mobileFilterToggle {
     display: inline-block;
-    position: static;
-    margin: 0;
-    z-index: 60;
-    box-shadow: 0 8px 18px rgba(11, 60, 93, 0.12);
   }
 
-  .filtersCloseBtn {
-    display: inline-block;
+  .filtersPanel.closedMobile {
+    display: none;
+  }
+
+  .filtersPanel.openMobile {
+    display: block;
   }
 }
 
 @media (max-width: 640px) {
   .container {
-    padding: 10px;
+    padding: 12px;
   }
 
   h1 {
-    font-size: 1.6rem;
-  }
-
-  .appTitle {
-    font-size: 1.2rem;
+    font-size: 1.85rem;
   }
 
   .kpiGrid {
     grid-template-columns: 1fr;
-    gap: 10px;
-    margin-bottom: 12px;
   }
 
   .kpiCard {
-    padding: 10px 11px;
-    min-height: auto;
-  }
-
-  .kpiCardPrimary,
-  .kpiCardSmooth {
-    min-height: auto;
-  }
-
-  .kpiLabel {
-    font-size: 9px;
-    margin-bottom: 4px;
-  }
-
-  .kpiValue {
-    font-size: 22px;
-  }
-
-  .kpiValueSmall {
-    font-size: 19px;
-  }
-
-  .kpiSubline {
-    font-size: 12px;
-    margin: 2px 0;
-  }
-
-  .kpiLabelSpacing {
-    margin-top: 6px;
-  }
-
-  .kpiCardSmooth .kpiLabel {
-    font-size: 8px;
-  }
-
-  .kpiCardSmooth .kpiValue {
-    font-size: 18px;
-  }
-
-  .kpiCount {
-    font-size: 10px;
+    padding: 12px;
   }
 
   .filtersPanel {
-    width: min(88vw, 300px);
-    padding: 12px 10px;
+    padding: 12px;
   }
 
   .tableSearchBar input {
@@ -731,13 +579,5 @@ th.stickyCol2 {
   .wrapTextCell {
     min-width: 180px;
     max-width: 240px;
-  }
-
-  .logoutBtn {
-    padding: 9px 12px;
-  }
-
-  .userNameLabel {
-    font-size: 11px;
   }
 }
