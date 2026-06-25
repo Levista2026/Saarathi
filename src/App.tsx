@@ -20,6 +20,16 @@ type UserAccess = {
   can_submit_redemption: boolean | null;
   is_active: boolean | null;
 };
+type OutletKpiBucket = {
+  clubs: Set<string>;
+  hasAchPositive: boolean;
+  hasAchZero: boolean;
+  achTotal: number;
+  payoutTotal: number;
+  growthTotal: number;
+  paymentIdTotal: number;
+  noOfSkuTotal: number;
+};
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -52,6 +62,7 @@ const DISPLAY_COLUMNS = [
   "Ach",
   "Club",
   "Growth %",
+  "LPPC",
   "Payout %",
 ] as const;
 const SEARCH_COLUMNS = ["SO", "ASM", "RSM", "DB Code", "DB Name", "Outlet Id", "Outlet Name", "Club"] as const;
@@ -67,6 +78,7 @@ const EXPORT_COLUMNS = [
   { key: "Ach", label: "Ach" },
   { key: "Club", label: "Club" },
   { key: "Growth %", label: "Growth %" },
+  { key: "LPPC", label: "LPPC" },
   { key: "Payout %", label: "Payout %" },
   { key: "Beat Id", label: "Beat Id" },
   { key: "Beat Name", label: "Beat Name" },
@@ -125,6 +137,12 @@ const parsePercent = (value: unknown): number => {
   const raw = parseNumber(value);
   if (!Number.isFinite(raw)) return 0;
   return Math.max(0, Math.min(100, raw));
+};
+
+const getRowLppc = (row: SaarathiRow): number => {
+  const paymentIdTotal = parseNumber(row["Payment id"]);
+  const noOfSkuTotal = parseNumber(row["No of Sku"]);
+  return paymentIdTotal > 0 ? noOfSkuTotal / paymentIdTotal : 0;
 };
 
 const normalizeText = (value: unknown): string => String(value ?? "").trim().toLowerCase();
@@ -446,7 +464,11 @@ export default function App() {
   }, [rows, accessRow]);
 
   const columns = DISPLAY_COLUMNS.filter((column) =>
-    accessibleRows.some((row) => Object.prototype.hasOwnProperty.call(row, column)),
+    column === "LPPC"
+      ? accessibleRows.some(
+          (row) => Object.prototype.hasOwnProperty.call(row, "Payment id") || Object.prototype.hasOwnProperty.call(row, "No of Sku"),
+        )
+      : accessibleRows.some((row) => Object.prototype.hasOwnProperty.call(row, column)),
   );
 
   const rowsByHierarchy = useMemo(() => {
@@ -561,9 +583,9 @@ export default function App() {
   const sortedRows = useMemo(() => {
     const sorted = [...rowsAfterSearch];
     sorted.sort((a, b) => {
-      const aValue = a[sortConfig.column];
-      const bValue = b[sortConfig.column];
-      const numericColumns = ["Outlet Id", "LYSM Tgt", "Ach", "Growth %", "Payout %"];
+      const aValue = sortConfig.column === "LPPC" ? getRowLppc(a) : a[sortConfig.column];
+      const bValue = sortConfig.column === "LPPC" ? getRowLppc(b) : b[sortConfig.column];
+      const numericColumns = ["Outlet Id", "LYSM Tgt", "Ach", "Growth %", "LPPC", "Payout %"];
 
       if (numericColumns.includes(sortConfig.column)) {
         const diff = parseNumber(aValue) - parseNumber(bValue);
@@ -618,7 +640,7 @@ export default function App() {
               ? 22
               : label === "Beat Name"
                 ? 20
-                : label === "Order Value"
+                : label === "Order Value" || label === "LPPC"
                   ? 14
                   : 14,
       }));
@@ -641,9 +663,10 @@ export default function App() {
 
       for (const row of sortedRows) {
         const dataRow = EXPORT_COLUMNS.map(({ key }) => {
-          if (key === "LYSM Tgt" || key === "Ach" || key === "Order Value") {
-            return Math.round(parseNumber(row[key]));
-          } else if (key === "Outlet Id") {
+          if (key === "LYSM Tgt" || key === "Ach" || key === "Order Value" || key === "LPPC") {
+            return key === "LPPC" ? Number(getRowLppc(row).toFixed(2)) : Math.round(parseNumber(row[key]));
+          }
+          if (key === "Outlet Id") {
             return Math.round(parseNumber(row[key]));
           }
           return row[key] === null || row[key] === undefined ? "" : String(row[key]);
@@ -652,7 +675,7 @@ export default function App() {
         added.height = 18;
         added.eachCell((cell, columnNumber) => {
           const label = EXPORT_COLUMNS[columnNumber - 1]?.label ?? "";
-          const centerColumns = new Set(["Outlet ID", "LYSM", "Ach", "Growth %", "Payout %", "Order Value"]);
+          const centerColumns = new Set(["Outlet ID", "LYSM", "Ach", "Growth %", "LPPC", "Payout %", "Order Value"]);
           cell.alignment = {
             vertical: "middle",
             horizontal: centerColumns.has(label) ? "center" : "left",
@@ -678,58 +701,94 @@ export default function App() {
   };
 
   const kpis = useMemo(() => {
-    const uniqueOutlets = new Set<string>();
-    const coverageOutlets = new Set<string>();
-    const growthOutlets = new Set<string>();
-    const inClubNoGrowthOutlets = new Set<string>();
-    const growthNotInClubOutlets = new Set<string>();
-    let diamond = 0;
-    let gold = 0;
-    let silver = 0;
-    let noClub = 0;
-    let unbilled = 0;
-    let billedNotInClub = 0;
-    let totalAch = 0;
-
+    const outletBuckets = new Map<string, OutletKpiBucket>();
     for (const row of rowsByHierarchy) {
       const outletId = row["Outlet Id"];
       if (outletId !== null && outletId !== undefined && String(outletId).trim() !== "") {
         const outletKey = String(outletId);
-        uniqueOutlets.add(outletKey);
-
-        if (parseNumber(row.Ach) > 0) {
-          coverageOutlets.add(outletKey);
-        }
-
-        if (parseNumber(row["Payout %"]) > 0) {
-          growthOutlets.add(outletKey);
-        }
-
         const club = normalizeClub(row.Club);
+        const ach = parseNumber(row.Ach);
         const payout = parseNumber(row["Payout %"]);
         const growth = parseNumber(row["Growth %"]);
-        if (
-          (club === "diamond" || club === "daimond" || club === "gold" || club === "silver") &&
-          payout === 0
-        ) {
-          inClubNoGrowthOutlets.add(outletKey);
-        }
-        if (growth >= 30 && club === "no club") {
-          growthNotInClubOutlets.add(outletKey);
+
+        const existing = outletBuckets.get(outletKey);
+        if (!existing) {
+          outletBuckets.set(outletKey, {
+            clubs: new Set(club ? [club] : []),
+            hasAchPositive: ach > 0,
+            hasAchZero: ach <= 0,
+            achTotal: ach,
+            payoutTotal: payout,
+            growthTotal: growth,
+            paymentIdTotal: parseNumber(row["Payment id"]),
+            noOfSkuTotal: parseNumber(row["No of Sku"]),
+          });
+        } else {
+          if (club) existing.clubs.add(club);
+          existing.hasAchPositive = existing.hasAchPositive || ach > 0;
+          existing.hasAchZero = existing.hasAchZero || ach <= 0;
+          existing.achTotal += ach;
+          existing.payoutTotal += payout;
+          existing.growthTotal += growth;
+          existing.paymentIdTotal += parseNumber(row["Payment id"]);
+          existing.noOfSkuTotal += parseNumber(row["No of Sku"]);
         }
       }
-
-      const club = normalizeClub(row.Club);
-      if (club === "diamond" || club === "daimond") diamond += 1;
-      if (club === "gold") gold += 1;
-      if (club === "silver") silver += 1;
-      if (club === "no club") noClub += 1;
-
-      const ach = parseNumber(row.Ach);
-      if (ach <= 0) unbilled += 1;
-      if (ach > 0 && club === "no club") billedNotInClub += 1;
-      totalAch += ach;
     }
+
+    const uniqueOutlets = new Set(outletBuckets.keys());
+    const diamondOutlets = new Set<string>();
+    const goldOutlets = new Set<string>();
+    const silverOutlets = new Set<string>();
+    const noClubOutlets = new Set<string>();
+    const coverageOutlets = new Set<string>();
+    const growthOutlets = new Set<string>();
+    const inClubNoGrowthOutlets = new Set<string>();
+    const growthNotInClubOutlets = new Set<string>();
+    const billedNotInClubOutlets = new Set<string>();
+    let billedNotInClub = 0;
+    let totalAch = 0;
+    let paymentIdTotal = 0;
+    let noOfSkuTotal = 0;
+
+    for (const [outletKey, bucket] of outletBuckets) {
+      if (bucket.clubs.has("diamond") || bucket.clubs.has("daimond")) diamondOutlets.add(outletKey);
+      if (bucket.clubs.has("gold")) goldOutlets.add(outletKey);
+      if (bucket.clubs.has("silver")) silverOutlets.add(outletKey);
+      if (bucket.clubs.has("no club")) noClubOutlets.add(outletKey);
+
+      if (bucket.hasAchPositive) coverageOutlets.add(outletKey);
+      if (bucket.payoutTotal > 0) growthOutlets.add(outletKey);
+      if (
+        (bucket.clubs.has("diamond") ||
+          bucket.clubs.has("daimond") ||
+          bucket.clubs.has("gold") ||
+          bucket.clubs.has("silver")) &&
+        bucket.payoutTotal === 0
+      ) {
+        inClubNoGrowthOutlets.add(outletKey);
+      }
+      if (bucket.clubs.has("no club") && bucket.growthTotal >= 30) {
+        growthNotInClubOutlets.add(outletKey);
+      }
+
+      totalAch += bucket.achTotal;
+      paymentIdTotal += bucket.paymentIdTotal;
+      noOfSkuTotal += bucket.noOfSkuTotal;
+    }
+
+    const unbilledOutlets = new Set<string>();
+    for (const [outletKey, bucket] of outletBuckets) {
+      if (bucket.achTotal <= 0) {
+        unbilledOutlets.add(outletKey);
+      }
+      if (bucket.achTotal > 0 && bucket.clubs.has("no club")) {
+        billedNotInClubOutlets.add(outletKey);
+      }
+    }
+
+    const unbilled = unbilledOutlets.size;
+    billedNotInClub = billedNotInClubOutlets.size;
 
     return {
       totalOutletsEnrolled: uniqueOutlets.size,
@@ -739,15 +798,18 @@ export default function App() {
       outletsGrowthAchievement:
         uniqueOutlets.size > 0 ? (growthOutlets.size / uniqueOutlets.size) * 100 : 0,
       growthOutletCount: growthOutlets.size,
-      diamond,
-      gold,
-      silver,
-      noClub,
+      diamond: diamondOutlets.size,
+      gold: goldOutlets.size,
+      silver: silverOutlets.size,
+      noClub: noClubOutlets.size,
       unbilled,
       billedNotInClub,
       inClubNoGrowth: inClubNoGrowthOutlets.size,
       growthNotInClub: growthNotInClubOutlets.size,
       totalAch,
+      paymentIdTotal,
+      noOfSkuTotal,
+      lppc: paymentIdTotal > 0 ? noOfSkuTotal / paymentIdTotal : 0,
     };
   }, [rowsByHierarchy]);
 
@@ -984,7 +1046,7 @@ export default function App() {
             {kpis.outletsGrowthAchievement.toFixed(1)}% <span className="kpiCount">({kpis.growthOutletCount})</span>
           </p>
           <p className="kpiLabel kpiLabelSpacing">LPPC</p>
-          <p className="kpiValue">0</p>
+          <p className="kpiValue">{kpis.lppc.toFixed(2)}</p>
         </article>
 
         <article className="kpiCard">
@@ -1137,6 +1199,8 @@ export default function App() {
                     >
                       {column === "LYSM Tgt" || column === "Ach" ? (
                         formatRounded(row[column])
+                      ) : column === "LPPC" ? (
+                        getRowLppc(row).toFixed(2)
                       ) : column === "Club" ? (
                         <span className={`clubBadge ${normalizeClub(row[column]).replace(/\s+/g, "-")}`}>
                           {row[column] === null || row[column] === undefined ? "" : String(row[column])}
